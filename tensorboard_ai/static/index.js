@@ -44,22 +44,14 @@ export async function render() {
     scrollToChart(e.detail.tag);
   });
 
+  // Refresh
+  root.querySelector("#tb-ai-refresh").addEventListener("click", () => {
+    reload();
+  });
+
   // Analyze All
   root.querySelector("#tb-ai-analyze-all").addEventListener("click", () => {
-    const visibleGroups = getVisibleTagGroups();
-    // Build run aliases to compress long run names
-    const allRuns = new Set();
-    for (const series of Object.values(visibleGroups)) {
-      for (const { run } of series) allRuns.add(run);
-    }
-    const { aliases, legend } = buildRunAliases([...allRuns]);
-    const parts = [];
-    if (legend) parts.push(legend);
-    parts.push(summarizeTagGroups(visibleGroups, aliases));
-    const crossMetric = buildCrossMetricContext(visibleGroups, aliases);
-    if (crossMetric) parts.push(crossMetric);
-    if (legend) parts.push("NOTE: The data above uses short aliases for run names. In your response, always use the original full run names, not the aliases.");
-    const dataContext = parts.join("\n\n");
+    const dataContext = buildFullDataContext();
     openChat({
       title: "Full Training Analysis",
       dataContext,
@@ -255,6 +247,7 @@ export async function reload() {
   if (rootEl) await fetchAndRender(rootEl);
 }
 
+
 /* ── Resize handle ── */
 
 function initResizeHandle(handle, target, prop, opts) {
@@ -303,6 +296,23 @@ function rebuildTagGroups() {
       tagGroups[tag].push({ run, points, color: runColors[run] });
     }
   }
+}
+
+/** Build data context string from all visible metrics. */
+export function buildFullDataContext() {
+  const visibleGroups = getVisibleTagGroups();
+  const allRuns = new Set();
+  for (const series of Object.values(visibleGroups)) {
+    for (const { run } of series) allRuns.add(run);
+  }
+  const { aliases, legend } = buildRunAliases([...allRuns]);
+  const parts = [];
+  if (legend) parts.push(legend);
+  parts.push(summarizeTagGroups(visibleGroups, aliases));
+  const crossMetric = buildCrossMetricContext(visibleGroups, aliases);
+  if (crossMetric) parts.push(crossMetric);
+  if (legend) parts.push("NOTE: The data above uses short aliases for run names. In your response, always use the original full run names, not the aliases.");
+  return parts.join("\n\n");
 }
 
 function getVisibleTagGroups() {
@@ -548,6 +558,7 @@ const LAYOUT_HTML = `
 
     <main class="tb-ai-main">
       <div class="tb-ai-toolbar">
+        <button id="tb-ai-refresh" class="tb-ai-refresh" title="Reload data">&#x21bb;</button>
         <button id="tb-ai-analyze-all" class="tb-ai-analyze-all">Analyze All</button>
       </div>
       <div id="tb-ai-grid" class="tb-ai-grid">
@@ -757,6 +768,18 @@ const CSS = `
     border-bottom: 1px solid #e0e0e0;
     flex-shrink: 0;
   }
+  .tb-ai-refresh {
+    padding: 6px 10px;
+    background: #fff;
+    color: #555;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+    line-height: 1;
+  }
+  .tb-ai-refresh:hover { background: #f0f0f0; }
   .tb-ai-analyze-all {
     padding: 6px 16px;
     background: #ff6f00;

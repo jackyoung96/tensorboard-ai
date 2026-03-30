@@ -2,6 +2,8 @@
  * Chat side-panel with SSE streaming, markdown rendering, and metric links.
  */
 
+import { buildFullDataContext } from "./index.js";
+
 const CHAT_ENDPOINT = "./chat";
 
 let panelEl = null;
@@ -361,7 +363,13 @@ async function sendMessage() {
   const isFirst = conversationHistory.length === 0;
 
   let content = text;
-  const ctx = panelEl.dataset.context;
+  let ctx = panelEl.dataset.context;
+  // If no context yet (user typed before Analyze All), auto-build from all visible data
+  if (isFirst && !ctx) {
+    ctx = buildFullDataContext();
+    panelEl.dataset.context = ctx;
+    titleEl.textContent = "AI Analysis";
+  }
   if (isFirst && ctx) {
     content = "Here is the data I want you to analyze:\n\n" + ctx + "\n\nUser request: " + text;
   }
