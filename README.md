@@ -5,7 +5,9 @@ A TensorBoard plugin that adds conversational AI analysis to your training dashb
 ## Quick Start
 
 ```bash
-pip install tensorboard-ai
+git clone https://github.com/jackyoung96/tensorboard-ai.git
+cd tensorboard-ai
+pip install .
 ```
 
 Set your API key:

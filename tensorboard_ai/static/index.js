@@ -209,6 +209,11 @@ export async function render() {
   syncAnalysisSettings();
 
   // Load data
+  await loadPlotly();
+  await fetchAndRender(root);
+}
+
+async function fetchAndRender(root) {
   try {
     const data = await fetch(SCALARS_ENDPOINT).then((r) => {
       if (!r.ok) throw new Error("HTTP " + r.status);
@@ -217,8 +222,17 @@ export async function render() {
     allScalars = data;
 
     const allRuns = Object.keys(data);
+    // Preserve existing run colors, assign new ones for new runs
     runColors = assignRunColors(allRuns);
-    allRuns.forEach((r) => enabledRuns.add(r));
+    // Add new runs to enabledRuns (keep disabled runs disabled)
+    const prevRuns = new Set(allRunLabels.map((r) => r.run));
+    if (prevRuns.size === 0) {
+      allRuns.forEach((r) => enabledRuns.add(r));
+    } else {
+      for (const r of allRuns) {
+        if (!prevRuns.has(r)) enabledRuns.add(r);
+      }
+    }
 
     const allTags = new Set();
     for (const tags of Object.values(data)) {
@@ -228,13 +242,17 @@ export async function render() {
 
     buildRunCheckboxes(root.querySelector("#tb-ai-runs-list"), allRuns);
 
-    await loadPlotly();
     rebuildTagGroups();
     rerenderCharts();
   } catch (err) {
-    root.querySelector("#tb-ai-grid").innerHTML =
+    (rootEl || document).querySelector("#tb-ai-grid").innerHTML =
       '<div class="tb-ai-empty">Failed to load data: ' + (err.message || err) + "</div>";
   }
+}
+
+/** Reload data from the server and re-render charts. */
+export async function reload() {
+  if (rootEl) await fetchAndRender(rootEl);
 }
 
 /* ── Resize handle ── */

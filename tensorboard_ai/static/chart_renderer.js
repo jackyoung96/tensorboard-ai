@@ -28,7 +28,7 @@ const COLORS = [
 function smooth(values, weight) {
   if (weight <= 0) return values;
   const smoothed = [];
-  let last = values[0];
+  let last = 0;
   let numAccum = 0;
   for (let i = 0; i < values.length; i++) {
     const nextVal = values[i];
