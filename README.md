@@ -25,14 +25,17 @@ Launch TensorBoard:
 tensorboard --logdir /path/to/logs
 ```
 
-Open the **AI** tab in TensorBoard. Click **Analyze All** or use the **AI** button on any chart.
+Open the **AI** tab in TensorBoard. Select metrics with checkboxes and hit **Send** to start analysis.
+
+![TensorBoard AI Example](assets/tensorboard-ai-example.png)
+*(Dummy data example)*
 
 ## Features
 
 ### AI-Powered Training Analysis
 
-- One-click **Analyze All** for comprehensive analysis of all visible metrics
-- Per-metric **AI** button on each chart card for focused analysis
+- **Metric selection** — per-chart checkbox to include/exclude metrics from AI context, with All/None toolbar toggle
+- **Default analysis prompt** — hit Send with empty input for comprehensive analysis of selected metrics
 - Automatic training type detection (SFT, RL/PPO, DPO, Pre-training) with domain-specific insights
 - Cross-metric correlation analysis (e.g., grad_norm spike when reward drops)
 - Hyperparameter-aware analysis — automatically reads hparams and highlights differences across runs
@@ -50,7 +53,7 @@ Open the **AI** tab in TensorBoard. Click **Analyze All** or use the **AI** butt
 - Markdown rendering with GFM support (tables, code blocks, lists)
 - Clickable metric names in responses — scrolls to and highlights the corresponding chart
 - Follow-up conversations with full context retention
-- Analysis history: switch between previous analyses
+- **+ New** button to start fresh sessions; previous sessions saved in history dropdown
 
 ### Chart Visualization
 
@@ -72,7 +75,7 @@ Three-panel layout with resizable panels:
 
 | Settings Sidebar | Chart Grid | AI Analysis Panel |
 |---|---|---|
-| Chart settings, analysis settings, run selection, tag filter | Interactive Plotly charts with per-metric AI buttons | Streaming chat with markdown, metric links, history |
+| Chart settings, analysis settings, run selection, tag filter | Interactive Plotly charts with per-metric context checkboxes | Streaming chat with markdown, metric links, session history |
 
 ### Settings
 
@@ -80,6 +83,7 @@ Three-panel layout with resizable panels:
 - **Analysis**: Language (Auto/EN/KO/JA/ZH/ES/FR/DE), provider, model, extended thinking, debug mode
 - **Runs**: Checkbox list with color swatches, regex filter, Select All/None
 - **Tag Filter**: Filter visible charts by tag name
+- **Metrics**: Per-chart checkbox for AI context inclusion; selected metrics sort to top
 
 ## Configuration
 

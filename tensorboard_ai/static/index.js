@@ -22,6 +22,7 @@ let tagFilter = "";
 let runFilter = "";
 let smoothing = 0.6;
 let xAxisMode = "step";
+let cardWidth = 380;
 let selectedTags = new Set();
 
 export async function render() {
@@ -51,13 +52,23 @@ export async function render() {
 
   // Settings: Smoothing
   const smoothSlider = root.querySelector("#tb-ai-smoothing");
-  const smoothValue = root.querySelector("#tb-ai-smoothing-val");
   smoothSlider.value = smoothing;
-  smoothValue.textContent = smoothing.toFixed(2);
   smoothSlider.addEventListener("input", () => {
     smoothing = parseFloat(smoothSlider.value);
-    smoothValue.textContent = smoothing.toFixed(2);
     rerenderCharts();
+  });
+
+  // Settings: Card Width
+  const widthSlider = root.querySelector("#tb-ai-card-width");
+  widthSlider.value = cardWidth;
+  widthSlider.addEventListener("input", () => {
+    cardWidth = parseInt(widthSlider.value, 10);
+    const grid = root.querySelector("#tb-ai-grid");
+    grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${cardWidth}px, 1fr))`;
+    // Resize Plotly charts to fit new card width
+    grid.querySelectorAll(".tb-ai-card-chart").forEach((el) => {
+      if (typeof Plotly !== "undefined") Plotly.Plots.resize(el);
+    });
   });
 
   // Settings: X-axis
@@ -507,7 +518,10 @@ const LAYOUT_HTML = `
         <label class="tb-ai-setting-row">
           <span class="tb-ai-setting-label">Smoothing</span>
           <input id="tb-ai-smoothing" type="range" min="0" max="0.999" step="0.001" />
-          <span id="tb-ai-smoothing-val" class="tb-ai-setting-value">0.60</span>
+        </label>
+        <label class="tb-ai-setting-row">
+          <span class="tb-ai-setting-label">Card Width</span>
+          <input id="tb-ai-card-width" type="range" min="280" max="800" step="10" />
         </label>
         <div class="tb-ai-setting-group">
           <span class="tb-ai-setting-label">Horizontal Axis</span>
@@ -679,14 +693,10 @@ const CSS = `
     color: #555;
     display: block;
     margin-bottom: 4px;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
-  .tb-ai-setting-value {
-    font-size: 11px;
-    color: #888;
-    min-width: 32px;
-    text-align: right;
-  }
-  #tb-ai-smoothing { flex: 1; height: 2px; accent-color: #ff6f00; }
+  #tb-ai-smoothing, #tb-ai-card-width { flex: 1; height: 2px; accent-color: #ff6f00; }
   .tb-ai-setting-group { margin-bottom: 8px; }
   .tb-ai-radio {
     display: block;
