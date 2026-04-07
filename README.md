@@ -5,9 +5,15 @@ A TensorBoard plugin that adds conversational AI analysis to your training dashb
 ## Quick Start
 
 ```bash
+pip install tensorboard-ai
+```
+
+Or install from source for developers:
+
+```bash
 git clone https://github.com/jackyoung96/tensorboard-ai.git
 cd tensorboard-ai
-pip install .
+pip install -e .
 ```
 
 Set your API key:
@@ -27,7 +33,7 @@ tensorboard --logdir /path/to/logs
 
 Open the **AI** tab in TensorBoard. Select metrics with checkboxes and hit **Send** to start analysis.
 
-![TensorBoard AI Example](assets/tensorboard-ai-example.png)
+![TensorBoard AI Example](https://raw.githubusercontent.com/jackyoung96/tensorboard-ai/master/assets/tensorboard-ai-example.png)
 *(Dummy data example)*
 
 ## Features
