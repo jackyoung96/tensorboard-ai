@@ -6,7 +6,6 @@ import {
   loadPlotly,
   renderChart,
   assignRunColors,
-  summarizeSeries,
   summarizeTagGroups,
   buildCrossMetricContext,
   buildRunAliases,
@@ -23,6 +22,7 @@ let tagFilter = "";
 let runFilter = "";
 let smoothing = 0.6;
 let xAxisMode = "step";
+let selectedTags = new Set();
 
 export async function render() {
   const root = document.createElement("div");
@@ -47,20 +47,6 @@ export async function render() {
   // Refresh
   root.querySelector("#tb-ai-refresh").addEventListener("click", () => {
     reload();
-  });
-
-  // Analyze All
-  root.querySelector("#tb-ai-analyze-all").addEventListener("click", () => {
-    const dataContext = buildFullDataContext();
-    openChat({
-      title: "Full Training Analysis",
-      dataContext,
-      autoMessage:
-        "Provide a comprehensive analysis of all training metrics. " +
-        "Identify key trends, potential issues, and actionable insights. " +
-        "Pay special attention to cross-metric correlations at event steps — " +
-        "e.g., did grad_norm spike when reward dropped? Did loss plateau when learning_rate decayed?",
-    });
   });
 
   // Settings: Smoothing
@@ -150,12 +136,20 @@ export async function render() {
     filterRunCheckboxes();
   });
 
-  // Select All / None
+  // Select All / None (runs)
   root.querySelector("#tb-ai-runs-all").addEventListener("click", () => {
     toggleFilteredRuns(true);
   });
   root.querySelector("#tb-ai-runs-none").addEventListener("click", () => {
     toggleFilteredRuns(false);
+  });
+
+  // Metric selection: All / None
+  root.querySelector("#tb-ai-metrics-all").addEventListener("click", () => {
+    toggleAllMetrics(true);
+  });
+  root.querySelector("#tb-ai-metrics-none").addEventListener("click", () => {
+    toggleAllMetrics(false);
   });
 
   // Resizable sidebar
@@ -232,6 +226,17 @@ async function fetchAndRender(root) {
     }
     setKnownTags([...allTags]);
 
+    // Initialize selectedTags: first load selects all; reload auto-selects new tags
+    const prevKnownTags = new Set(allMetricLabels.map((m) => m.tag));
+    if (prevKnownTags.size === 0) {
+      allTags.forEach((t) => selectedTags.add(t));
+    } else {
+      for (const t of allTags) {
+        if (!prevKnownTags.has(t)) selectedTags.add(t);
+      }
+    }
+    allMetricLabels = [...allTags].map((t) => ({ tag: t }));
+
     buildRunCheckboxes(root.querySelector("#tb-ai-runs-list"), allRuns);
 
     rebuildTagGroups();
@@ -298,18 +303,28 @@ function rebuildTagGroups() {
   }
 }
 
-/** Build data context string from all visible metrics. */
+/** Return sorted list of currently selected tag names. */
+export function getSelectedTagNames() {
+  return [...selectedTags].sort();
+}
+
+/** Build data context string from selected metrics. */
 export function buildFullDataContext() {
   const visibleGroups = getVisibleTagGroups();
+  // Filter to only selected tags
+  const contextGroups = {};
+  for (const [tag, series] of Object.entries(visibleGroups)) {
+    if (selectedTags.has(tag)) contextGroups[tag] = series;
+  }
   const allRuns = new Set();
-  for (const series of Object.values(visibleGroups)) {
+  for (const series of Object.values(contextGroups)) {
     for (const { run } of series) allRuns.add(run);
   }
   const { aliases, legend } = buildRunAliases([...allRuns]);
   const parts = [];
   if (legend) parts.push(legend);
-  parts.push(summarizeTagGroups(visibleGroups, aliases));
-  const crossMetric = buildCrossMetricContext(visibleGroups, aliases);
+  parts.push(summarizeTagGroups(contextGroups, aliases));
+  const crossMetric = buildCrossMetricContext(contextGroups, aliases);
   if (crossMetric) parts.push(crossMetric);
   if (legend) parts.push("NOTE: The data above uses short aliases for run names. In your response, always use the original full run names, not the aliases.");
   return parts.join("\n\n");
@@ -422,6 +437,18 @@ function toggleFilteredRuns(enable) {
   rerenderCharts();
 }
 
+/* ── Metrics (tag selection for AI context) ── */
+
+let allMetricLabels = []; // kept for tracking known tags on reload
+
+function toggleAllMetrics(enable) {
+  for (const tag of Object.keys(tagGroups)) {
+    if (enable) selectedTags.add(tag);
+    else selectedTags.delete(tag);
+  }
+  rerenderCharts();
+}
+
 /* ── Chart rendering ── */
 
 function rerenderCharts() {
@@ -430,7 +457,12 @@ function rerenderCharts() {
   grid.innerHTML = "";
 
   const visible = getVisibleTagGroups();
-  const tags = Object.keys(visible).sort();
+  const tags = Object.keys(visible).sort((a, b) => {
+    const aSelected = selectedTags.has(a);
+    const bSelected = selectedTags.has(b);
+    if (aSelected !== bSelected) return aSelected ? -1 : 1;
+    return a.localeCompare(b);
+  });
 
   if (tags.length === 0) {
     grid.innerHTML = '<div class="tb-ai-empty">No matching metrics.</div>';
@@ -440,36 +472,25 @@ function rerenderCharts() {
   for (const tag of tags) {
     const series = visible[tag];
     const card = document.createElement("div");
-    card.className = "tb-ai-card";
+    card.className = "tb-ai-card" + (selectedTags.has(tag) ? "" : " tb-ai-card-deselected");
     card.dataset.tag = tag;
+
+    const selectCb = document.createElement("input");
+    selectCb.type = "checkbox";
+    selectCb.className = "tb-ai-card-checkbox";
+    selectCb.checked = selectedTags.has(tag);
+    selectCb.title = "Include in AI context";
+    selectCb.addEventListener("change", () => {
+      if (selectCb.checked) selectedTags.add(tag);
+      else selectedTags.delete(tag);
+      rerenderCharts();
+    });
+    card.appendChild(selectCb);
 
     const chartDiv = document.createElement("div");
     chartDiv.className = "tb-ai-card-chart";
     card.appendChild(chartDiv);
 
-    const bar = document.createElement("div");
-    bar.className = "tb-ai-card-bar";
-    const aiBtn = document.createElement("button");
-    aiBtn.className = "tb-ai-card-btn";
-    aiBtn.textContent = "AI";
-    aiBtn.title = 'Analyze "' + tag + '"';
-    aiBtn.addEventListener("click", () => {
-      const runs = series.map((s) => s.run);
-      const { aliases: a, legend: l } = buildRunAliases(runs);
-      const ctxParts = [];
-      if (l) ctxParts.push(l);
-      ctxParts.push(summarizeSeries(tag, series, a));
-      if (l) ctxParts.push("NOTE: The data above uses short aliases for run names. In your response, always use the original full run names, not the aliases.");
-      const ctx = ctxParts.join("\n\n");
-      openChat({
-        title: tag,
-        dataContext: ctx,
-        autoMessage:
-          'Analyze the "' + tag + '" metric. Describe the trend, identify any anomalies, and suggest whether training looks healthy.',
-      });
-    });
-    bar.appendChild(aiBtn);
-    card.appendChild(bar);
     grid.appendChild(card);
 
     renderChart(chartDiv, tag, series, { smoothing, xAxisMode });
@@ -552,14 +573,21 @@ const LAYOUT_HTML = `
         <input id="tb-ai-tag-filter" type="text" placeholder="Filter tags"
                class="tb-ai-tag-input" />
       </div>
+
     </aside>
 
     <div id="tb-ai-sidebar-resize" class="tb-ai-resize-handle"></div>
 
     <main class="tb-ai-main">
       <div class="tb-ai-toolbar">
-        <button id="tb-ai-refresh" class="tb-ai-refresh" title="Reload data">&#x21bb;</button>
-        <button id="tb-ai-analyze-all" class="tb-ai-analyze-all">Analyze All</button>
+        <span class="tb-ai-toolbar-left">
+          <span class="tb-ai-toolbar-label">Include in AI context:</span>
+          <button id="tb-ai-metrics-all" class="tb-ai-link-btn">All</button>
+          <button id="tb-ai-metrics-none" class="tb-ai-link-btn">None</button>
+        </span>
+        <span class="tb-ai-toolbar-right">
+          <button id="tb-ai-refresh" class="tb-ai-refresh" title="Reload data">&#x21bb;</button>
+        </span>
       </div>
       <div id="tb-ai-grid" class="tb-ai-grid">
         <div class="tb-ai-empty">Loading metrics...</div>
@@ -762,11 +790,27 @@ const CSS = `
   }
   .tb-ai-toolbar {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     padding: 8px 16px;
     background: #fff;
     border-bottom: 1px solid #e0e0e0;
     flex-shrink: 0;
+  }
+  .tb-ai-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tb-ai-toolbar-label {
+    font-size: 12px;
+    color: #555;
+    font-weight: 500;
+  }
+  .tb-ai-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
   .tb-ai-refresh {
     padding: 6px 10px;
@@ -780,18 +824,6 @@ const CSS = `
     line-height: 1;
   }
   .tb-ai-refresh:hover { background: #f0f0f0; }
-  .tb-ai-analyze-all {
-    padding: 6px 16px;
-    background: #ff6f00;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .tb-ai-analyze-all:hover { background: #e65100; }
   .tb-ai-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
@@ -814,10 +846,24 @@ const CSS = `
     display: flex;
     flex-direction: column;
     transition: box-shadow 0.3s, outline 0.3s;
+    position: relative;
+  }
+  .tb-ai-card-checkbox {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 5;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #ff6f00;
   }
   .tb-ai-card-highlight {
     outline: 2px solid #ff6f00;
     box-shadow: 0 0 12px rgba(255,111,0,0.3);
+  }
+  .tb-ai-card-deselected {
+    opacity: 0.5;
   }
   .tb-ai-card-chart { padding: 6px 6px 0; min-height: 280px; }
   .tb-ai-card-bar { display: flex; justify-content: flex-end; padding: 2px 8px 6px; }
@@ -873,6 +919,19 @@ const CSS = `
     gap: 6px;
     flex-shrink: 0;
   }
+  .tb-ai-new-btn {
+    padding: 3px 8px;
+    background: #ff6f00;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+  .tb-ai-new-btn:hover { background: #e65100; }
   .tb-ai-history-select {
     font-size: 11px;
     padding: 3px 6px;

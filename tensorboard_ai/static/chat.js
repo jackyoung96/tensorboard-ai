@@ -2,7 +2,7 @@
  * Chat side-panel with SSE streaming, markdown rendering, and metric links.
  */
 
-import { buildFullDataContext } from "./index.js";
+import { buildFullDataContext, getSelectedTagNames } from "./index.js";
 
 const CHAT_ENDPOINT = "./chat";
 
@@ -55,12 +55,13 @@ export function initChatPanel(container) {
     <div class="tb-ai-chat-header">
       <span class="tb-ai-chat-title">AI Analysis</span>
       <div class="tb-ai-chat-header-right">
+        <button class="tb-ai-new-btn">+ New</button>
         <select class="tb-ai-history-select"></select>
       </div>
     </div>
     <div class="tb-ai-chat-messages"></div>
     <div class="tb-ai-chat-input-row">
-      <input type="text" placeholder="Ask about this metric..." />
+      <input type="text" placeholder="Analyze all training metrics, identify trends, issues, and cross-metric correlations." />
       <button class="tb-ai-chat-send">Send</button>
     </div>
   `;
@@ -70,6 +71,11 @@ export function initChatPanel(container) {
   messagesEl = panelEl.querySelector(".tb-ai-chat-messages");
   inputEl = panelEl.querySelector("input");
   sendBtn = panelEl.querySelector(".tb-ai-chat-send");
+
+  const newBtn = panelEl.querySelector(".tb-ai-new-btn");
+  newBtn.addEventListener("click", () => {
+    openChat({ title: "AI Analysis" });
+  });
 
   historySelect.addEventListener("change", () => {
     const id = parseInt(historySelect.value, 10);
@@ -179,10 +185,19 @@ function rebuildHistorySelect() {
     return;
   }
   historySelect.style.display = "";
+
+  // Show current (new) session indicator when not viewing a saved session
+  if (!activeHistoryId) {
+    const cur = document.createElement("option");
+    cur.value = "0";
+    cur.textContent = "— Current —";
+    cur.selected = true;
+    historySelect.appendChild(cur);
+  }
+
   for (const entry of analysisHistory) {
     const opt = document.createElement("option");
     opt.value = String(entry.id);
-    // Truncate long titles for the dropdown
     opt.textContent = entry.title.length > 30 ? entry.title.slice(0, 28) + "..." : entry.title;
     opt.title = entry.title;
     if (entry.id === activeHistoryId) opt.selected = true;
@@ -204,6 +219,7 @@ export function openChat({ title, dataContext, autoMessage }) {
   titleEl.textContent = title || "AI Analysis";
   panelEl.dataset.context = dataContext || "";
   isFirstMessage = true;
+  rebuildHistorySelect();
 
   if (autoMessage) {
     inputEl.value = autoMessage;
@@ -355,20 +371,45 @@ function linkifyMetrics(container) {
   }
 }
 
+const DEFAULT_PROMPT =
+  "Provide a comprehensive analysis of all training metrics. " +
+  "Identify key trends, potential issues, and actionable insights. " +
+  "Pay special attention to cross-metric correlations at event steps — " +
+  "e.g., did grad_norm spike when reward dropped? Did loss plateau when learning_rate decayed?";
+
 async function sendMessage() {
-  const text = inputEl.value.trim();
-  if (!text || isStreaming) return;
+  let text = inputEl.value.trim();
+  if (isStreaming) return;
+  // If empty and first message, use default prompt
+  if (!text) {
+    if (conversationHistory.length > 0) return;
+    text = DEFAULT_PROMPT;
+  }
   inputEl.value = "";
 
   const isFirst = conversationHistory.length === 0;
 
   let content = text;
   let ctx = panelEl.dataset.context;
-  // If no context yet (user typed before Analyze All), auto-build from all visible data
+  // If no context yet, auto-build from selected metrics
   if (isFirst && !ctx) {
     ctx = buildFullDataContext();
     panelEl.dataset.context = ctx;
-    titleEl.textContent = "AI Analysis";
+  }
+  // Auto-generate title from selected metrics on first message
+  if (isFirst) {
+    const tags = getSelectedTagNames();
+    if (tags.length > 0) {
+      const MAX_LEN = 40;
+      let title = tags[0];
+      let i = 1;
+      while (i < tags.length && (title + ", " + tags[i]).length <= MAX_LEN) {
+        title += ", " + tags[i];
+        i++;
+      }
+      if (i < tags.length) title += " +" + (tags.length - i);
+      titleEl.textContent = title;
+    }
   }
   if (isFirst && ctx) {
     content = "Here is the data I want you to analyze:\n\n" + ctx + "\n\nUser request: " + text;
